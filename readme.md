@@ -16,6 +16,14 @@ This project was done for educational purposes. Don't expect everything to run i
 - Docker CE, with your dev-user added to `docker`group.
 
 
+# Environment variables
+A couple of them are required before you can use some of the make commands.
+
+export APP_VERSION="1.0"
+export AWS_REGION=eu-west-1
+export AWS_ACCOUNT="YOUR_AWS_ACCOUNT"
+
+
 ## Create the local dev environment.
 > make ready-dev
 
