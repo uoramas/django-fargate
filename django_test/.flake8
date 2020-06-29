@@ -1,0 +1,9 @@
+
+[flake8]
+
+ignore =
+    # Ignore lines longer than 80 chars
+    E501
+
+exclude = 
+    .venv
