@@ -1,7 +1,9 @@
 
 ready-dev:
+	python3 -m venv .venv
 	python3 -m venv django_test/.venv
 	. django_test/.venv/bin/activate && pip install -r django_test/requirements
+	. .venv/bin/activate && pip install -r requirements
 	ln -s `readlink -f localdev/git/hooks/pre-commit` .git/hooks/pre-commit
 
 docker-build-image:
@@ -19,3 +21,6 @@ docker-login:
 docker-push-image:
 	docker push ${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/django-test:${APP_VERSION}
 
+cloudformation-lint:
+	yamllint cloudformation/*
+	cfn-lint -t cloudformation/*
