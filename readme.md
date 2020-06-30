@@ -8,7 +8,7 @@ This small project comprises a simple installation of latest Django and points d
 This project was done for educational purposes. Don't expect everything to run in one go. The AWS infrastructure needs to be already in place. There are many parts left behind and assumptions, so this project shouldn't be considered best practice just yet.
 
 
-## Requirements.
+# Requirements.
 - Linux OS. Tested over Ubuntu 18
 - Make
 - Python3.8. Will probably work on older versions but untested.
@@ -19,9 +19,9 @@ This project was done for educational purposes. Don't expect everything to run i
 # Environment variables
 A couple of them are required before you can use some of the make commands.
 
-export APP_VERSION="1.0"
-export AWS_REGION=eu-west-1
-export AWS_ACCOUNT="YOUR_AWS_ACCOUNT"
+> export APP_VERSION="1.0"
+> export AWS_REGION=eu-west-1
+> export AWS_ACCOUNT="YOUR_AWS_ACCOUNT"
 
 
 ## Create the local dev environment.
@@ -41,3 +41,19 @@ export AWS_ACCOUNT="YOUR_AWS_ACCOUNT"
 
 ## Push local image into remote AWS ECR
 > make docker-push-image
+
+
+# AWS deployment
+## Additonationally to the previous, set required environment variables accordingly
+> export STACK_NAME=django-test-fargate-stack
+> export CHANGESET_TYPE=CREATE
+> export AWS_CLOUDFORMATION_TEMPLATE=cloudformation//django-test-root-stack.yml
+
+## Check lint of cloudformation templates
+> make cloudformation-lint
+
+## Create stack and changeset
+> make cloudformation-create-change-set
+
+## Execute changeset
+> make cloudformation-execute-change-set
