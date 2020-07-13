@@ -1,0 +1,181 @@
+---
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: AWS CloudFormation template for infrastructure for deployment and provision of django-test Fargate Service
+
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: "django-test"
+  DjangoTestRootStack:
+    Type: String
+    Default: "django-test-root"
+  Image:
+    Type: String
+    Default: ""
+  ContainerPort:
+    Type: Number
+    Default: 8000
+  DjangoTestCertificate:
+    Type: String
+    Default: ""
+
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, !Ref ProjectName]]
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['-', [!Ref ProjectName, "execution-role"]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['-', [!Ref ProjectName, "task-role"]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  DjangoTestTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Join ['-', [!Ref ProjectName, "task-definition"]]
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: "256"
+      Memory: 0.5GB
+      ExecutionRoleArn: !Ref "ExecutionRole"
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: !Ref ProjectName
+          Image: !Ref Image
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+          # Send logs to CloudWatch Logs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  DjangoTestService:
+    Type: AWS::ECS::Service
+    DependsOn: DjangoTestListener
+    Properties:
+      ServiceName: "django-test-service"
+      TaskDefinition: !Ref DjangoTestTaskDefinition
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 30
+      LaunchType: "FARGATE"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: "ENABLED"
+          SecurityGroups:
+            - !Ref DjangoTestServiceSG
+          Subnets:
+            - Fn::ImportValue:
+                !Sub "${DjangoTestRootStack}-SubnetAz1"
+            - Fn::ImportValue:
+                !Sub "${DjangoTestRootStack}-SubnetAz2"
+      LoadBalancers:
+        - TargetGroupArn: !Ref DjangoTestTargetGroup
+          ContainerPort: 8000
+          ContainerName: "django-test"
+      Cluster: "django-test-cluster"
+
+  DjangoTestServiceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Django test container Security Group"
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${DjangoTestRootStack}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+
+  DjangoTestLoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Django test Load Balancer Security Group"
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${DjangoTestRootStack}-vpc"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  DjangoTestTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: "/admin"
+      HealthCheckPort: "8000"
+      HealthCheckTimeoutSeconds: 7
+      UnhealthyThresholdCount: 4
+      HealthyThresholdCount: 4
+      Name: !Join ['-', [!Ref ProjectName, "TargetGroup"]]
+      Port: "8000"
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "60"
+      TargetType: ip
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${DjangoTestRootStack}-vpc"
+
+  DjangoTestLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+      Name: !Join ['-', [!Ref ProjectName, "LoadBalancer"]]
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref DjangoTestLoadBalancerSG
+      Subnets:
+        - Fn::ImportValue:
+            !Sub "${DjangoTestRootStack}-SubnetAz1"
+        - Fn::ImportValue:
+            !Sub "${DjangoTestRootStack}-SubnetAz2"
+
+  DjangoTestListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref DjangoTestTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref DjangoTestLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref DjangoTestCertificate
